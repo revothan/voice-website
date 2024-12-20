@@ -1,10 +1,16 @@
-from openai import OpenAI
-import speech_recognition as sr
-from flask import Flask, send_from_directory
 import os
-import webbrowser
 import re
+import webbrowser
+import time
+import pyttsx3
+from flask import Flask, send_from_directory
+import speech_recognition as sr
 from dotenv import load_dotenv
+from openai import OpenAI
+from colorama import Fore, Back, Style, init
+
+# Initialize Colorama
+init(autoreset=True)
 
 # Load environment variables
 load_dotenv()
@@ -15,35 +21,48 @@ app = Flask(__name__)
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
+# Initialize pyttsx3 for text-to-speech
+engine = pyttsx3.init()
+
+def type_effect(text, delay=0.05):
+    """Simulate typing effect in the terminal."""
+    for char in text:
+        print(char, end='', flush=True)
+        time.sleep(delay)
+    print()  # New line after the text
+
+def jarvis_speak(text):
+    """Simulate Jarvis speaking with pyttsx3."""
+    engine.say(text)
+    engine.runAndWait()
+
 def get_voice_command():
     """Capture and return the user's voice command as text."""
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
-        print("Mendengarkan perintah Anda...")
+        type_effect(Fore.CYAN + "Listening for your command...")
         recognizer.adjust_for_ambient_noise(source, duration=1)
         try:
             audio = recognizer.listen(source, timeout=5, phrase_time_limit=15)
             command = recognizer.recognize_google(audio, language="id-ID")
-            print(f"Anda mengatakan: {command}")
+            type_effect(Fore.GREEN + f"You said: {command}")
             return command
         except sr.UnknownValueError:
-            print("Maaf, saya tidak bisa memahami audio tersebut.")
+            type_effect(Fore.RED + "Sorry, I could not understand the audio.")
         except sr.RequestError as e:
-            print(f"Tidak dapat memproses permintaan; {e}")
+            type_effect(Fore.RED + f"Could not process the request; {e}")
         except Exception as e:
-            print(f"Terjadi kesalahan: {e}")
+            type_effect(Fore.RED + f"Error: {e}")
     return None
 
 def generate_website(prompt):
     """Generate website code using OpenAI based on the given prompt."""
-    print("Generating website code from OpenAI...")
+    type_effect(Fore.YELLOW + "Generating website code from OpenAI...")
     try:
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": """You are an expert web developer creating modern, responsive websites.
-                DO NOT use any markdown code blocks (```). Provide clean code without formatting markers.
-                Follow these requirements strictly:
+                {"role": "system", "content": """You are an expert web developer creating modern, responsive websites. DO NOT use any markdown code blocks (```). Provide clean code without formatting markers. Follow these requirements strictly:
                 1. Use modern CSS (Flexbox/Grid) for layouts
                 2. Ensure mobile responsiveness
                 3. Include hover states and smooth transitions
@@ -51,18 +70,14 @@ def generate_website(prompt):
                 5. Write clean, well-structured JavaScript
                 6. Include proper error handling
                 7. Add user feedback and status messages
-                8. Use a professional color scheme
-                Provide code in these exact sections, without any markdown or code formatting:
-                [HTML_START] (Clean HTML content) [HTML_END]
-                [CSS_START] (Clean CSS content) [CSS_END]
-                [JS_START] (Clean JavaScript content) [JS_END]"""},
+                8. Use a professional color scheme."""},
                 {"role": "user", "content": f"Create a modern, responsive website with this description: {prompt}. Provide clean code without any markdown formatting or code blocks."}
             ],
             temperature=0.2
         )
         return parse_code_sections(response.choices[0].message.content)
     except Exception as e:
-        print(f"Error generating website: {e}")
+        type_effect(Fore.RED + f"Error generating website: {e}")
     return None
 
 def parse_code_sections(code_text):
@@ -81,7 +96,7 @@ def parse_code_sections(code_text):
             'js': js.group(1).strip()
         }
     except Exception as e:
-        print(f"Error parsing code sections: {e}")
+        type_effect(Fore.RED + f"Error parsing code sections: {e}")
     return None
 
 def save_website_files(code_sections):
@@ -115,7 +130,7 @@ def save_website_files(code_sections):
             f.write(html_content)
         return True
     except Exception as e:
-        print(f"Error saving files: {e}")
+        type_effect(Fore.RED + f"Error saving files: {e}")
     return False
 
 @app.route('/')
@@ -129,21 +144,27 @@ def serve_website():
 def main():
     """Main function to orchestrate the voice command to website generation."""
     if not os.getenv('OPENAI_API_KEY'):
-        print("Error: OPENAI_API_KEY not found in environment variables.")
+        type_effect(Fore.RED + "Error: OPENAI_API_KEY not found in environment variables.")
         return
+
+    type_effect(Fore.CYAN + "Initializing Jarvis...")
+
+    # Simulate Jarvis "speaking"
+    jarvis_speak("Hello, I am your virtual assistant. Ready for commands.")
 
     command = get_voice_command()
     if command:
+        type_effect(Fore.CYAN + "Processing your command...")
         code_sections = generate_website(command)
         if code_sections and save_website_files(code_sections):
             url = "http://127.0.0.1:5000"
-            print(f"Launching preview at {url}...")
+            type_effect(Fore.GREEN + f"Website generated successfully. Launching preview at {url}...")
             webbrowser.open(url)
             app.run(debug=False)
         else:
-            print("Failed to generate or save website code.")
+            type_effect(Fore.RED + "Failed to generate or save website code.")
     else:
-        print("No valid voice command provided.")
+        type_effect(Fore.RED + "No valid voice command provided.")
 
 if __name__ == '__main__':
     main()
