@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generated Website</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+        body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+}
+
+header {
+    background-color: #333;
+    color: white;
+    padding: 10px 0;
+    text-align: center;
+}
+
+#note-input {
+    margin: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+#note-text {
+    resize: none;
+    height: 100px;
+    margin-bottom: 10px;
+    padding: 10px;
+}
+
+#save-note {
+    background-color: #333;
+    color: white;
+    border: none;
+    padding: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#save-note:hover {
+    background-color: #444;
+}
+
+#note-history {
+    margin: 20px;
+}
+
+#note-list {
+    list-style-type: none;
+    padding: 0;
+}
+    </style>
+</head>
+<body>
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Taking App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Note Taking App</h1>
+    </header>
+    <main>
+        <section id="note-input">
+            <textarea id="note-text" placeholder="Write your note here..."></textarea>
+            <button id="save-note">Save Note</button>
+        </section>
+        <section id="note-history">
+            <h2>History</h2>
+            <ul id="note-list"></ul>
+        </section>
+    </main>
+    <script src="script.js"></script>
+</body>
+</html>
+    <script>
+        (function() { 'use strict'; document.getElementById('save-note').addEventListener('click', function() {
+    var noteText = document.getElementById('note-text').value;
+    if (noteText === '') {
+        alert('Please write a note before saving.');
+        return;
+    }
+    var noteList = document.getElementById('note-list');
+    var newNote = document.createElement('li');
+    newNote.textContent = noteText;
+    noteList.appendChild(newNote);
+    document.getElementById('note-text').value = '';
+}); })();
+    </script>
+</body>
+</html>
