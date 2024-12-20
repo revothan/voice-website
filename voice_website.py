@@ -1,5 +1,4 @@
 import os
-import re
 import webbrowser
 import time
 import pyttsx3
@@ -7,7 +6,7 @@ from flask import Flask, send_from_directory
 import speech_recognition as sr
 from dotenv import load_dotenv
 from openai import OpenAI
-from colorama import Fore, Back, Style, init
+from colorama import Fore, Style, init
 
 # Initialize Colorama
 init(autoreset=True)
@@ -29,7 +28,7 @@ def type_effect(text, delay=0.05):
     for char in text:
         print(char, end='', flush=True)
         time.sleep(delay)
-    print()  # New line after the text
+    print()
 
 def jarvis_speak(text):
     """Simulate Jarvis speaking with pyttsx3."""
@@ -62,7 +61,19 @@ def generate_website(prompt):
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": """You are an expert web developer creating modern, responsive websites. DO NOT use any markdown code blocks (```). Provide clean code without formatting markers. Follow these requirements strictly:
+                {"role": "system", "content": """You are an expert web developer creating modern, responsive websites. 
+                Generate a complete website with HTML, CSS, and JavaScript. Your response should be structured as follows:
+
+                HTML:
+                [Place your HTML code here]
+
+                CSS:
+                [Place your CSS code here]
+
+                JavaScript:
+                [Place your JavaScript code here]
+
+                Requirements:
                 1. Use modern CSS (Flexbox/Grid) for layouts
                 2. Ensure mobile responsiveness
                 3. Include hover states and smooth transitions
@@ -70,11 +81,12 @@ def generate_website(prompt):
                 5. Write clean, well-structured JavaScript
                 6. Include proper error handling
                 7. Add user feedback and status messages
-                8. Use a professional color scheme."""},
-                {"role": "user", "content": f"Create a modern, responsive website with this description: {prompt}. Provide clean code without any markdown formatting or code blocks."}
+                8. Use a professional color scheme"""},
+                {"role": "user", "content": f"Create a modern, responsive website with this description: {prompt}"}
             ],
             temperature=0.2
         )
+        
         return parse_code_sections(response.choices[0].message.content)
     except Exception as e:
         type_effect(Fore.RED + f"Error generating website: {e}")
@@ -83,21 +95,35 @@ def generate_website(prompt):
 def parse_code_sections(code_text):
     """Extract HTML, CSS, and JS sections from the OpenAI response."""
     try:
-        html = re.search(r'\[HTML_START\](.*?)\[HTML_END\]', code_text, re.DOTALL)
-        css = re.search(r'\[CSS_START\](.*?)\[CSS_END\]', code_text, re.DOTALL)
-        js = re.search(r'\[JS_START\](.*?)\[JS_END\]', code_text, re.DOTALL)
-
-        if not all([html, css, js]):
-            raise ValueError("Could not parse all sections of the code")
-
-        return {
-            'html': html.group(1).strip(),
-            'css': css.group(1).strip(),
-            'js': js.group(1).strip()
-        }
+        sections = code_text.split('\n\n')
+        code_sections = {'html': '', 'css': '', 'js': ''}
+        
+        current_section = None
+        for line in code_text.split('\n'):
+            if 'HTML:' in line:
+                current_section = 'html'
+                continue
+            elif 'CSS:' in line:
+                current_section = 'css'
+                continue
+            elif 'JavaScript:' in line or 'Javascript:' in line:
+                current_section = 'js'
+                continue
+            
+            if current_section and line.strip():
+                code_sections[current_section] += line + '\n'
+        
+        # Remove any leading/trailing whitespace
+        for section in code_sections:
+            code_sections[section] = code_sections[section].strip()
+            
+        if not all(code_sections.values()):
+            raise ValueError("One or more code sections are empty")
+            
+        return code_sections
     except Exception as e:
         type_effect(Fore.RED + f"Error parsing code sections: {e}")
-    return None
+        return None
 
 def save_website_files(code_sections):
     """Save the generated website files to the local directory."""
@@ -121,7 +147,16 @@ def save_website_files(code_sections):
 <body>
     {code_sections['html']}
     <script>
-        (function() {{ 'use strict'; {code_sections['js']} }})();
+        (function() {{ 
+            'use strict';
+            document.addEventListener('DOMContentLoaded', function() {{
+                try {{
+                    {code_sections['js']}
+                }} catch (error) {{
+                    console.error('Error executing JavaScript:', error);
+                }}
+            }});
+        }})();
     </script>
 </body>
 </html>"""
@@ -152,19 +187,27 @@ def main():
     # Simulate Jarvis "speaking"
     jarvis_speak("Hello, I am your virtual assistant. Ready for commands.")
 
-    command = get_voice_command()
-    if command:
-        type_effect(Fore.CYAN + "Processing your command...")
-        code_sections = generate_website(command)
-        if code_sections and save_website_files(code_sections):
-            url = "http://127.0.0.1:5000"
-            type_effect(Fore.GREEN + f"Website generated successfully. Launching preview at {url}...")
-            webbrowser.open(url)
-            app.run(debug=False)
+    while True:  # Add loop to allow multiple attempts
+        command = get_voice_command()
+        if command:
+            type_effect(Fore.CYAN + "Processing your command...")
+            code_sections = generate_website(command)
+            if code_sections and save_website_files(code_sections):
+                url = "http://127.0.0.1:5000"
+                type_effect(Fore.GREEN + f"Website generated successfully. Launching preview at {url}...")
+                webbrowser.open(url)
+                app.run(debug=False)
+                break  # Exit loop on success
+            else:
+                type_effect(Fore.YELLOW + "Would you like to try again? (Say 'yes' or 'no')")
+                retry = get_voice_command()
+                if not retry or 'no' in retry.lower():
+                    break
         else:
-            type_effect(Fore.RED + "Failed to generate or save website code.")
-    else:
-        type_effect(Fore.RED + "No valid voice command provided.")
+            type_effect(Fore.YELLOW + "Would you like to try again? (Say 'yes' or 'no')")
+            retry = get_voice_command()
+            if not retry or 'no' in retry.lower():
+                break
 
 if __name__ == '__main__':
     main()
