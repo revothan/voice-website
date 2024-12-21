@@ -1,28 +1,26 @@
 import os
-import webbrowser
 import time
+import webbrowser
 import pyttsx3
-from flask import Flask, send_from_directory
-import speech_recognition as sr
+from flask import Flask, send_from_directory, request
 from dotenv import load_dotenv
+import speech_recognition as sr
 from openai import OpenAI
 from colorama import Fore, Style, init
+import shutil
 
-# Initialize Colorama
+# --------------------- Initialization ---------------------
 init(autoreset=True)
-
-# Load environment variables
 load_dotenv()
 
-# Initialize Flask app
-app = Flask(__name__)
+API_KEY = os.getenv('OPENAI_API_KEY')
+if not API_KEY:
+    raise EnvironmentError("Error: OPENAI_API_KEY not found in environment variables.")
+client = OpenAI(api_key=API_KEY)
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-
-# Initialize pyttsx3 for text-to-speech
 engine = pyttsx3.init()
 
+# --------------------- Utility Functions ---------------------
 def type_effect(text, delay=0.05):
     """Simulate typing effect in the terminal."""
     for char in text:
@@ -54,6 +52,23 @@ def get_voice_command():
             type_effect(Fore.RED + f"Error: {e}")
     return None
 
+# --------------------- Flask App Creation Function ---------------------
+def create_flask_app(site_folder):
+    """Create a new Flask app instance for each website."""
+    app = Flask(__name__)
+    
+    @app.route('/')
+    def serve_website():
+        try:
+            return send_from_directory(site_folder, "index.html")
+        except FileNotFoundError:
+            return "Website not generated yet. Please try generating one first."
+        except Exception as e:
+            return f"Error serving website: {str(e)}"
+    
+    return app
+
+# --------------------- OpenAI Integration ---------------------
 def generate_website(prompt):
     """Generate website code using OpenAI based on the given prompt."""
     type_effect(Fore.YELLOW + "Generating website code from OpenAI...")
@@ -62,151 +77,142 @@ def generate_website(prompt):
             model="gpt-4",
             messages=[
                 {"role": "system", "content": """You are an expert web developer creating modern, responsive websites. 
-                Generate a complete website with HTML, CSS, and JavaScript. Your response should be structured as follows:
-
-                HTML:
-                [Place your HTML code here]
-
-                CSS:
-                [Place your CSS code here]
-
-                JavaScript:
-                [Place your JavaScript code here]
-
+                Generate a complete, single HTML file that includes embedded CSS in the style tag and JavaScript in the script tag.
+                Do not use markdown code blocks or language indicators.
+                Do not include section markers or separators.
+                Use Mockup Informations if needed such as business name, business product, the brand colors, etc.
+                
                 Requirements:
-                1. Use modern CSS (Flexbox/Grid) for layouts
-                2. Ensure mobile responsiveness
-                3. Include hover states and smooth transitions
-                4. Use semantic HTML5 elements
-                5. Write clean, well-structured JavaScript
-                6. Include proper error handling
-                7. Add user feedback and status messages
-                8. Use a professional color scheme"""},
+                - Include viewport meta tag for responsiveness
+                - Use modern CSS features (flexbox/grid)
+                - Ensure cross-browser compatibility
+                - Include error handling in JavaScript
+                - Add comments for clarity
+                - Make the design mobile-responsive
+                
+                Format your response as a single complete HTML file with internal CSS and JS."""},
                 {"role": "user", "content": f"Create a modern, responsive website with this description: {prompt}"}
             ],
-            temperature=0.2
+            temperature=0.7,
+            max_tokens=4000
         )
-        
-        return parse_code_sections(response.choices[0].message.content)
+        return {'html': response.choices[0].message.content}
     except Exception as e:
         type_effect(Fore.RED + f"Error generating website: {e}")
-    return None
+        return None
 
 def parse_code_sections(code_text):
-    """Extract HTML, CSS, and JS sections from the OpenAI response."""
+    """Extract HTML, CSS, and JS sections from the OpenAI response using improved parsing."""
     try:
-        sections = code_text.split('\n\n')
-        code_sections = {'html': '', 'css': '', 'js': ''}
-        
+        sections = {'html': '', 'css': '', 'js': ''}
         current_section = None
-        for line in code_text.split('\n'):
-            if 'HTML:' in line:
+        
+        lines = code_text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            
+            if '---HTML---' in line.upper():
                 current_section = 'html'
                 continue
-            elif 'CSS:' in line:
+            elif '---CSS---' in line.upper():
                 current_section = 'css'
                 continue
-            elif 'JavaScript:' in line or 'Javascript:' in line:
+            elif '---JS---' in line.upper():
                 current_section = 'js'
                 continue
-            
-            if current_section and line.strip():
-                code_sections[current_section] += line + '\n'
+            elif '---END---' in line.upper():
+                break
+                
+            if current_section and line:
+                sections[current_section] += line + '\n'
         
-        # Remove any leading/trailing whitespace
-        for section in code_sections:
-            code_sections[section] = code_sections[section].strip()
+        for key in sections:
+            sections[key] = sections[key].strip()
             
-        if not all(code_sections.values()):
-            raise ValueError("One or more code sections are empty")
+        if not all(sections.values()):
+            missing = [k for k, v in sections.items() if not v]
+            raise ValueError(f"Missing or empty sections: {', '.join(missing)}")
             
-        return code_sections
+        return sections
     except Exception as e:
         type_effect(Fore.RED + f"Error parsing code sections: {e}")
         return None
 
-def save_website_files(code_sections):
-    """Save the generated website files to the local directory."""
+def save_website_files(code_sections, iteration):
+    """Save the generated website files in a new folder for each iteration."""
     if not code_sections:
-        return False
+        return False, None
 
     try:
-        os.makedirs("generated_site", exist_ok=True)
-        html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generated Website</title>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: Arial, sans-serif; color: #333; line-height: 1.6; }}
-        {code_sections['css']}
-    </style>
-</head>
-<body>
-    {code_sections['html']}
-    <script>
-        (function() {{ 
-            'use strict';
-            document.addEventListener('DOMContentLoaded', function() {{
-                try {{
-                    {code_sections['js']}
-                }} catch (error) {{
-                    console.error('Error executing JavaScript:', error);
-                }}
-            }});
-        }})();
-    </script>
-</body>
-</html>"""
-
-        with open("generated_site/index.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
-        return True
+        site_folder = f"generated_site_{iteration}"
+        
+        if os.path.exists(site_folder):
+            shutil.rmtree(site_folder)
+        
+        os.makedirs(site_folder)
+        
+        with open(f"{site_folder}/index.html", "w", encoding="utf-8") as f:
+            f.write(code_sections['html'])
+        return True, site_folder
     except Exception as e:
         type_effect(Fore.RED + f"Error saving files: {e}")
-    return False
+        return False, None
 
-@app.route('/')
-def serve_website():
-    """Serve the generated website on the root route."""
-    try:
-        return send_from_directory("generated_site", "index.html")
-    except FileNotFoundError:
-        return "Website not generated yet."
-
+# --------------------- Main Program ---------------------
 def main():
-    """Main function to orchestrate the voice command to website generation."""
-    if not os.getenv('OPENAI_API_KEY'):
-        type_effect(Fore.RED + "Error: OPENAI_API_KEY not found in environment variables.")
-        return
-
+    """Main function with support for multiple website generations."""
     type_effect(Fore.CYAN + "Initializing Jarvis...")
-
-    # Simulate Jarvis "speaking"
     jarvis_speak("Hello, I am your virtual assistant. Ready for commands.")
 
-    while True:  # Add loop to allow multiple attempts
+    iteration = 1
+    port_start = 5000
+
+    while True:
         command = get_voice_command()
         if command:
             type_effect(Fore.CYAN + "Processing your command...")
             code_sections = generate_website(command)
-            if code_sections and save_website_files(code_sections):
-                url = "http://127.0.0.1:5000"
-                type_effect(Fore.GREEN + f"Website generated successfully. Launching preview at {url}...")
+            
+            success, site_folder = save_website_files(code_sections, iteration)
+            
+            if success:
+                port = port_start + iteration - 1
+                url = f"http://127.0.0.1:{port}"
+                type_effect(Fore.GREEN + f"Website {iteration} generated successfully. Launching preview at {url}...")
+                
+                app = create_flask_app(site_folder)
                 webbrowser.open(url)
-                app.run(debug=False)
-                break  # Exit loop on success
+                
+                try:
+                    app.run(debug=False, port=port)
+                except Exception as e:
+                    type_effect(Fore.RED + f"Error running server: {e}")
+                    continue
+
+                jarvis_speak("Would you like to generate another website? Say yes or no.")
+                type_effect(Fore.YELLOW + "Would you like to generate another website? (Say 'yes' or 'no')")
+                
+                retry = get_voice_command()
+                if retry and 'yes' in retry.lower():
+                    iteration += 1
+                    continue
+                else:
+                    jarvis_speak("Thank you for using the website generator. Goodbye!")
+                    type_effect(Fore.GREEN + "Thank you for using the website generator. Goodbye!")
+                    break
             else:
                 type_effect(Fore.YELLOW + "Would you like to try again? (Say 'yes' or 'no')")
                 retry = get_voice_command()
                 if not retry or 'no' in retry.lower():
+                    jarvis_speak("Thank you for using the website generator. Goodbye!")
+                    type_effect(Fore.GREEN + "Thank you for using the website generator. Goodbye!")
                     break
         else:
             type_effect(Fore.YELLOW + "Would you like to try again? (Say 'yes' or 'no')")
             retry = get_voice_command()
             if not retry or 'no' in retry.lower():
+                jarvis_speak("Thank you for using the website generator. Goodbye!")
+                type_effect(Fore.GREEN + "Thank you for using the website generator. Goodbye!")
                 break
 
 if __name__ == '__main__':
